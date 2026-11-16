@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="SITTA Vue: aplikasi pemesanan dan distribusi bahan ajar Universitas Terbuka dengan Vue Component dan Template.">
+  <title>SITTA Vue</title>
+  <link rel="icon" href="assets/img/logo-sitta.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <!-- pasang tema tersimpan sebelum halaman tampil agar tidak berkedip -->
+  <script>try { document.documentElement.setAttribute('data-theme', localStorage.getItem('sitta3-tema') || 'light'); } catch (e) {}</script>
+</head>
+<body>
+<div id="app" v-cloak>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#stok" @click.prevent="gantiTab('stok')">
+        <img src="assets/img/logo-sitta.svg" alt="">
+        <div><strong>SITTA</strong><span>Bahan Ajar UT &middot; Vue Component</span></div>
+      </a>
+
+      <!-- Routing cukup dengan tab state di root -->
+      <nav class="tabs" role="tablist" aria-label="Menu utama">
+        <button type="button" role="tab" v-for="(t, i) in daftarTab" :key="t.id"
+                :aria-selected="tab === t.id ? 'true' : 'false'"
+                :class="{ active: tab === t.id }"
+                :title="t.label + ' (Alt+' + (i + 1) + ')'"
+                @click="gantiTab(t.id)">
+          <span aria-hidden="true">{{ t.ikon }}</span>
+          <span class="label-panjang">{{ t.label }}</span><span class="label-pendek" aria-hidden="true">{{ t.pendek }}</span>
+          <span class="tab-count" v-if="t.jumlah > 0" :title="t.jumlah + ' ' + t.judulJumlah">{{ t.jumlah }}</span>
+        </button>
+      </nav>
+
+      <button type="button" class="theme-btn" @click="gantiTema"
+              :title="tema === 'dark' ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'"
+              v-text="tema === 'dark' ? '☀' : '☾'"></button>
+    </div>
+  </header>
+
+  <main class="page">
+    <!-- Status pemuatan data dan template -->
+    <div class="card status-card" v-if="status === 'memuat'">
+      <span class="spinner" aria-hidden="true"></span>
+      <p>Memuat data bahan ajar&hellip;</p>
+    </div>
+
+    <div class="card status-card gagal" v-else-if="status === 'gagal'">
+      <h2>Data belum bisa dimuat</h2>
+      <p class="muted">{{ pesanGagal }}</p>
+      <div v-if="dariFile">
+        <p>Halaman ini dibuka langsung dari folder (<code>file://</code>). Browser memblokir <code>fetch</code>
+          ke file lokal, padahal data JSON dan template komponen dimuat dengan <code>fetch</code>.
+          Jalankan lewat server lokal dengan salah satu cara berikut:</p>
+        <ol>
+          <li>VS Code: klik kanan <code>index.html</code> &rarr; <strong>Open with Live Server</strong>.</li>
+          <li>Terminal di folder <code>tugas3-vue-ut</code>: <code>npm run dev</code>,
+            lalu buka <code>http://localhost:5173</code>.</li>
+          <li>Tanpa Node.js: <code>python -m http.server 8000</code>,
+            lalu buka <code>http://localhost:8000</code>.</li>
+        </ol>
+      </div>
+      <button type="button" class="btn" @click="muat">Coba lagi</button>
+    </div>
+
+    <!-- Tiga "halaman". v-show menjaga isian form tetap ada saat pindah tab -->
+    <template v-if="status === 'siap'">
+      <section v-show="tab === 'stok'">
+        <ba-stock-table :items="state.stok"
+                        :upbjj-list="state.upbjjList"
+                        :kategori-list="state.kategoriList"
+                        @simpan="handleSimpanStok"
+                        @ubah-qty="handleUbahQty"
+                        @hapus="handleHapusStok"
+                        @notif="tampilNotif"></ba-stock-table>
+      </section>
+
+      <section v-show="tab === 'tracking'">
+        <do-tracking :data="state.tracking"
+                     :paket="state.paket"
+                     :stok="state.stok"
+                     :fokus="fokusDO"
+                     @tambah-progres="handleTambahProgres"
+                     @notif="tampilNotif"></do-tracking>
+      </section>
+
+      <section v-show="tab === 'order'">
+        <order-form :paket="state.paket"
+                    :ekspedisi="state.pengirimanList"
+                    :stok="state.stok"
+                    :nomor-do="nomorDOBerikut"
+                    @created="handleNewDO"
+                    @notif="tampilNotif"></order-form>
+      </section>
+
+      <!-- Pop-up konfirmasi (hapus, kembalikan data) -->
+      <app-modal :show="dialog.show" :title="dialog.judul" ukuran="sm" @close="jawabDialog(false)">
+        <p class="dialog-pesan">{{ dialog.pesan }}</p>
+        <template v-slot:footer>
+          <button type="button" class="btn btn-ghost" @click="jawabDialog(false)">Batal</button>
+          <button type="button" class="btn btn-utama" :class="{ 'btn-danger': dialog.bahaya }"
+                  @click="jawabDialog(true)">{{ dialog.tombolYa }}</button>
+        </template>
+      </app-modal>
+    </template>
+  </main>
+
+  <footer class="footer">
+    <span>SITTA Vue &middot; Tugas Praktik 3 STSI4209 Pemrograman Berbasis Web &middot; data dummy dari dataBahanAjar.json</span>
+    <span class="footer-aksi" v-if="status === 'siap'">
+      <kbd>Alt</kbd>+<kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> pindah tab &middot;
+      <button type="button" class="btn-link" @click="kembalikanDataAwal">Kembalikan data awal</button>
+    </span>
+  </footer>
+
+  <transition name="fade">
+    <div class="toast" v-if="notif.tampil" :class="{ 'toast-error': notif.jenis === 'error' }" role="status" aria-live="polite">
+      {{ notif.teks }}
+    </div>
+  </transition>
+</div>
+
+<!-- Template komponen ada di folder /templates dan dimuat oleh
+     js/services/template-loader.js sebelum komponen dirender:
+     tpl-stock, tpl-stock-form, tpl-tracking, tpl-order, tpl-badge, tpl-modal -->
+
+<!-- Scripts (urutan penting) -->
+<script src="js/vendor/vue.min.js"></script>
+<script src="js/filters.js"></script>
+<script src="js/services/api.js"></script>
+<script src="js/services/template-loader.js"></script>
+<script src="js/components/status-badge.js"></script>
+<script src="js/components/app-modal.js"></script>
+<script src="js/components/stock-form.js"></script>
+<script src="js/components/stock-table.js"></script>
+<script src="js/components/do-tracking.js"></script>
+<script src="js/components/order-form.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

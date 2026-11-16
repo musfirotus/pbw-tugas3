@@ -1,0 +1,103 @@
+<!-- Template untuk <ba-stock-form> (js/components/stock-form.js) -->
+<template id="tpl-stock-form">
+  <form class="stock-form" @submit.prevent="kirim" @keydown.enter="tekanEnter" novalidate>
+    <p class="small muted form-intro">
+      Kolom bertanda <span class="req">*</span> wajib diisi. Tekan <kbd>Enter</kbd> untuk menyimpan,
+      <kbd>Esc</kbd> untuk menutup.
+    </p>
+
+    <div class="form-grid">
+      <div class="field">
+        <label for="sf-kode">Kode mata kuliah <span class="req">*</span></label>
+        <input id="sf-kode" type="text" v-model="form.kode" @blur="tandai('kode')" maxlength="9"
+               :readonly="mode === 'edit'" placeholder="EKMA4116" autocomplete="off"
+               :class="{ 'is-invalid': pesanGalat('kode'), 'is-valid': tersentuh.kode && !galat.kode }">
+        <span class="error-msg" v-if="pesanGalat('kode')">{{ pesanGalat('kode') }}</span>
+        <span class="hint" v-else-if="mode === 'edit'">Kode tidak bisa diubah saat edit.</span>
+      </div>
+
+      <div class="field">
+        <label for="sf-judul">Judul mata kuliah <span class="req">*</span></label>
+        <input id="sf-judul" type="text" v-model="form.judul" @blur="tandai('judul')" maxlength="80"
+               placeholder="Pengantar Manajemen" :class="{ 'is-invalid': pesanGalat('judul') }">
+        <span class="error-msg" v-if="pesanGalat('judul')">{{ pesanGalat('judul') }}</span>
+      </div>
+
+      <div class="field">
+        <label for="sf-kategori">Kategori <span class="req">*</span></label>
+        <select id="sf-kategori" v-model="form.kategori" @blur="tandai('kategori')"
+                :class="{ 'is-invalid': pesanGalat('kategori') }">
+          <option value="" disabled>-- pilih kategori --</option>
+          <option v-for="k in kategoriList" :key="k" :value="k">{{ k }}</option>
+        </select>
+        <span class="error-msg" v-if="pesanGalat('kategori')">{{ pesanGalat('kategori') }}</span>
+      </div>
+
+      <div class="field">
+        <label for="sf-upbjj">UT-Daerah <span class="req">*</span></label>
+        <select id="sf-upbjj" v-model="form.upbjj" @blur="tandai('upbjj')"
+                :class="{ 'is-invalid': pesanGalat('upbjj') }">
+          <option value="" disabled>-- pilih UT-Daerah --</option>
+          <option v-for="d in upbjjList" :key="d" :value="d">{{ d }}</option>
+        </select>
+        <span class="error-msg" v-if="pesanGalat('upbjj')">{{ pesanGalat('upbjj') }}</span>
+      </div>
+
+      <div class="field">
+        <label for="sf-lokasiRak">Lokasi rak <span class="req">*</span></label>
+        <input id="sf-lokasiRak" type="text" v-model="form.lokasiRak" @blur="tandai('lokasiRak')" maxlength="7"
+               placeholder="R1-A3" :class="{ 'is-invalid': pesanGalat('lokasiRak') }">
+        <span class="error-msg" v-if="pesanGalat('lokasiRak')">{{ pesanGalat('lokasiRak') }}</span>
+      </div>
+
+      <div class="field">
+        <label for="sf-harga">Harga (Rp) <span class="req">*</span></label>
+        <input id="sf-harga" type="number" min="1000" step="500" v-model.number="form.harga" @blur="tandai('harga')"
+               placeholder="65000" :class="{ 'is-invalid': pesanGalat('harga') }">
+        <span class="error-msg" v-if="pesanGalat('harga')">{{ pesanGalat('harga') }}</span>
+        <span class="hint" v-else-if="form.harga">{{ form.harga | rupiah }}</span>
+      </div>
+
+      <div class="field">
+        <label for="sf-qty">Jumlah stok <span class="req">*</span></label>
+        <input id="sf-qty" type="number" min="0" v-model.number="form.qty" @blur="tandai('qty')"
+               placeholder="0" :class="{ 'is-invalid': pesanGalat('qty') }">
+        <span class="error-msg" v-if="pesanGalat('qty')">{{ pesanGalat('qty') }}</span>
+        <span class="hint" v-else-if="form.qty !== null && form.qty !== ''">{{ form.qty | satuan('buah') }}</span>
+      </div>
+
+      <div class="field">
+        <label for="sf-safety">Safety stock <span class="req">*</span></label>
+        <input id="sf-safety" type="number" min="1" v-model.number="form.safety" @blur="tandai('safety')"
+               placeholder="10" :class="{ 'is-invalid': pesanGalat('safety') }">
+        <span class="error-msg" v-if="pesanGalat('safety')">{{ pesanGalat('safety') }}</span>
+        <span class="hint" v-else-if="form.safety">{{ form.safety | satuan('buah') }}</span>
+      </div>
+
+      <div class="field span-2">
+        <label for="sf-catatanHTML">Catatan</label>
+        <input id="sf-catatanHTML" type="text" v-model="form.catatanHTML" @blur="tandai('catatanHTML')" maxlength="220"
+               placeholder="Boleh memakai <em>, <strong>, <i>, <u>, <b>"
+               :class="{ 'is-invalid': pesanGalat('catatanHTML') }">
+        <span class="error-msg" v-if="pesanGalat('catatanHTML')">{{ pesanGalat('catatanHTML') }}</span>
+        <span class="hint" v-else>Tag selain em, strong, i, u, b ditampilkan sebagai teks biasa.</span>
+        <div class="preview-html" v-show="form.catatanHTML">
+          <span class="small muted">Pratinjau: </span><span v-html="pratinjauCatatan"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pratinjau status dengan v-if / v-else-if / v-else -->
+    <p class="small status-preview" v-if="statusPratinjau">
+      Status setelah disimpan:
+      <span v-if="statusPratinjau === 'kosong'" class="badge badge-kosong">&#10006; Kosong</span>
+      <span v-else-if="statusPratinjau === 'menipis'" class="badge badge-tipis">&#9888; Menipis</span>
+      <span v-else class="badge badge-aman">&#10004; Aman</span>
+    </p>
+
+    <div class="form-actions">
+      <button type="button" class="btn btn-ghost" @click="$emit('batal')">Batal</button>
+      <button type="submit" class="btn btn-utama">{{ mode === 'tambah' ? 'Simpan bahan ajar' : 'Simpan perubahan' }}</button>
+    </div>
+  </form>
+</template>

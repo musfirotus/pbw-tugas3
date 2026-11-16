@@ -1,0 +1,126 @@
+<!-- Template untuk <order-form> (js/components/order-form.js) -->
+<template id="tpl-order">
+  <div class="order-page">
+    <div class="page-head">
+      <div>
+        <h1>Pemesanan Bahan Ajar</h1>
+        <p class="muted">Buat Delivery Order baru. Nomor DO dan total harga terisi otomatis.</p>
+      </div>
+    </div>
+
+    <div class="order-layout">
+      <section class="card" aria-label="Form DO baru">
+        <h2>Delivery Order Baru</h2>
+        <p class="small muted">Kolom bertanda <span class="req">*</span> wajib diisi. Tekan <kbd>Enter</kbd> untuk menyimpan.</p>
+
+        <form @submit.prevent="kirim" @keydown.enter="tekanEnter" novalidate>
+          <div class="field">
+            <label for="of-nomor">Nomor DO (otomatis)</label>
+            <input id="of-nomor" type="text" class="do-auto" :value="nomorDo" readonly>
+            <span class="hint">DO + tahun berjalan ({{ tahun }}) + nomor urut.</span>
+          </div>
+
+          <div class="form-grid">
+            <div class="field">
+              <label for="of-nim">NIM <span class="req">*</span></label>
+              <input id="of-nim" type="text" inputmode="numeric" v-model="form.nim" @blur="tandai('nim')"
+                     placeholder="9 digit angka" autocomplete="off"
+                     :class="{ 'is-invalid': pesanGalat('nim'), 'is-valid': form.nim.length === 9 }">
+              <span class="error-msg" v-if="pesanGalat('nim')">{{ pesanGalat('nim') }}</span>
+              <span class="hint" v-else>{{ form.nim.length }}/9 digit</span>
+            </div>
+
+            <div class="field">
+              <label for="of-nama">Nama mahasiswa <span class="req">*</span></label>
+              <input id="of-nama" type="text" v-model="form.nama" @blur="tandai('nama')" maxlength="60"
+                     placeholder="Nama lengkap" :class="{ 'is-invalid': pesanGalat('nama') }">
+              <span class="error-msg" v-if="pesanGalat('nama')">{{ pesanGalat('nama') }}</span>
+            </div>
+          </div>
+
+          <div class="field">
+            <span class="label" id="of-ekspedisi-label">Ekspedisi <span class="req">*</span></span>
+            <div class="radio-cards" role="radiogroup" aria-labelledby="of-ekspedisi-label">
+              <label v-for="(e, i) in ekspedisi" :key="e.kode" class="radio-card"
+                     :class="{ on: form.ekspedisi === e.kode, 'is-invalid': pesanGalat('ekspedisi') }">
+                <input type="radio" :id="i === 0 ? 'of-ekspedisi' : null" :value="e.kode"
+                       v-model="form.ekspedisi" @change="tandai('ekspedisi')">
+                <strong>{{ labelEkspedisi(e) }}</strong>
+                <span class="small muted">{{ e.nama }} &middot; kode {{ e.kode }}</span>
+              </label>
+            </div>
+            <span class="error-msg" v-if="pesanGalat('ekspedisi')">{{ pesanGalat('ekspedisi') }}</span>
+          </div>
+
+          <div class="field">
+            <label for="of-paket">Paket bahan ajar <span class="req">*</span></label>
+            <select id="of-paket" v-model="form.paket" @blur="tandai('paket')" :class="{ 'is-invalid': pesanGalat('paket') }">
+              <option value="" disabled>-- pilih paket --</option>
+              <option v-for="p in paket" :key="p.kode" :value="p.kode">{{ p.kode }} &ndash; {{ p.nama }}</option>
+            </select>
+            <span class="error-msg" v-if="pesanGalat('paket')">{{ pesanGalat('paket') }}</span>
+
+            <!-- Detail isi paket muncul setelah paket dipilih -->
+            <div class="paket-detail" v-if="paketTerpilih">
+              <strong>{{ paketTerpilih.nama }}</strong>
+              <span class="small muted"> &middot; {{ paketTerpilih.isi.length }} bahan ajar</span>
+              <ul>
+                <li v-for="(kode, i) in paketTerpilih.isi" :key="kode">
+                  {{ i + 1 }}. <span class="mono">{{ kode }}</span> &ndash; {{ judulMK(kode) }}
+                </li>
+              </ul>
+              <span class="small">Harga paket: <strong>{{ paketTerpilih.harga | rupiah }}</strong></span>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="of-tanggalKirim">Tanggal kirim <span class="req">*</span></label>
+            <div class="search-row">
+              <input id="of-tanggalKirim" type="date" v-model="form.tanggalKirim" @blur="tandai('tanggalKirim')"
+                     :min="batasTanggal.min" :max="batasTanggal.maks"
+                     :class="{ 'is-invalid': pesanGalat('tanggalKirim') }">
+              <button type="button" class="btn btn-ghost btn-sm" @click="isiHariIni">Hari ini</button>
+            </div>
+            <span class="error-msg" v-if="pesanGalat('tanggalKirim')">{{ pesanGalat('tanggalKirim') }}</span>
+            <span class="hint" v-else-if="form.tanggalKirim">{{ form.tanggalKirim | tanggalIndo }}</span>
+          </div>
+
+          <div class="total-box">
+            <span>Total harga</span>
+            <strong v-if="total > 0">{{ total | rupiah }}</strong>
+            <span class="muted small" v-else>pilih paket dulu</span>
+          </div>
+
+          <p class="error-msg" v-show="sudahDicoba && jumlahGalat > 0">Ada {{ jumlahGalat }} isian yang belum benar.</p>
+
+          <div class="form-actions">
+            <button type="button" class="btn btn-ghost" @click="kosongkan">Kosongkan</button>
+            <button type="submit" class="btn btn-clay">Simpan DO {{ nomorDo }}</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Ringkasan pesanan, ikut berubah selama form diisi -->
+      <aside class="card ringkasan-order" aria-label="Ringkasan pesanan">
+        <h2>Ringkasan</h2>
+        <dl>
+          <dt>Nomor DO</dt><dd class="mono">{{ nomorDo }}</dd>
+          <dt>Mahasiswa</dt>
+          <dd>
+            <span v-if="form.nama.trim()">{{ form.nama }}</span><span v-else class="muted">&ndash;</span>
+            <span class="small muted" v-show="form.nim"> ({{ form.nim }})</span>
+          </dd>
+          <dt>Ekspedisi</dt>
+          <dd>{{ ekspedisiTerpilih ? labelEkspedisi(ekspedisiTerpilih) : '–' }}</dd>
+          <dt>Paket</dt>
+          <dd>{{ paketTerpilih ? paketTerpilih.nama : '–' }}</dd>
+          <dt>Tanggal kirim</dt>
+          <dd>{{ form.tanggalKirim | tanggalIndo }}</dd>
+          <dt>Total</dt>
+          <dd class="total-mini">{{ total | rupiah }}</dd>
+        </dl>
+        <p class="small muted">Setelah disimpan, DO langsung terbuka di tab Tracking DO dengan status <em>Diproses</em>.</p>
+      </aside>
+    </div>
+  </div>
+</template>

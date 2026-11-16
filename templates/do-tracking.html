@@ -1,0 +1,159 @@
+<!-- Template untuk <do-tracking> (js/components/do-tracking.js) -->
+<template id="tpl-tracking">
+  <div class="tracking-page">
+    <div class="page-head">
+      <div>
+        <h1>Tracking Delivery Order</h1>
+        <p class="muted">Lacak pengiriman paket bahan ajar berdasarkan nomor DO atau NIM.
+          Tercatat <strong v-text="data.length"></strong> DO.</p>
+      </div>
+    </div>
+
+    <div class="track-layout">
+      <!-- ===== Kolom kiri: pencarian + hasil + detail ===== -->
+      <div>
+        <section class="card" aria-label="Pencarian DO">
+          <h2>Lacak Pengiriman</h2>
+
+          <div class="segmented" role="radiogroup" aria-label="Cari berdasarkan">
+            <label :class="{ on: mode === 'nomor' }"><input type="radio" value="nomor" v-model="mode"> Nomor DO</label>
+            <label :class="{ on: mode === 'nim' }"><input type="radio" value="nim" v-model="mode"> NIM</label>
+          </div>
+
+          <div class="search-row">
+            <input id="dt-cari" ref="inputCari" type="search" v-model="kataKunci" autocomplete="off"
+                   :inputmode="mode === 'nim' ? 'numeric' : 'text'"
+                   :placeholder="placeholderCari"
+                   :aria-label="mode === 'nomor' ? 'Nomor DO' : 'NIM'"
+                   :class="{ 'is-invalid': galat }"
+                   @keyup.enter="cari" @keyup.esc="reset">
+            <button type="button" class="btn" @click="cari">Cari</button>
+            <button type="button" class="btn btn-ghost" @click="reset" :disabled="!kataKunci && !sudahCari">Reset</button>
+          </div>
+          <p class="hint-keys"><kbd>Enter</kbd> untuk mencari &middot; <kbd>Esc</kbd> untuk mengosongkan</p>
+          <p class="error-msg" v-if="galat">{{ galat }}</p>
+
+          <!-- Hasil pencarian. NIM bisa punya lebih dari satu DO -->
+          <div class="hasil-list" v-if="sudahCari && hasilDO.length > 1">
+            <p class="small muted">Ditemukan {{ hasilDO.length }} DO. Pilih salah satu:</p>
+            <button type="button" class="hasil-item" v-for="d in hasilDO" :key="d.nomor"
+                    :class="{ active: d.nomor === terpilih }" @click="pilih(d.nomor)">
+              <span class="mono">{{ d.nomor }}</span>
+              <span>{{ d.nama }} &middot; {{ d.tanggalKirim | tanggalIndo }}</span>
+              <span class="badge badge-netral">{{ d.status }}</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- Detail DO: hanya dirender kalau ada DO terpilih -->
+        <section class="card detail-do" v-if="doTerpilih" ref="detail" aria-label="Detail DO">
+          <div class="result-head">
+            <div class="who">
+              <span class="avatar" aria-hidden="true">{{ doTerpilih.nama | inisial }}</span>
+              <div>
+                <p class="do-no">{{ doTerpilih.nomor }}</p>
+                <span>{{ doTerpilih.nama }} &middot; NIM <span class="mono" v-text="doTerpilih.nim"></span></span>
+              </div>
+            </div>
+            <div class="text-right">
+              <span v-if="doTerpilih.status === 'Terkirim'" class="badge badge-aman">&#10004; Terkirim</span>
+              <span v-else-if="doTerpilih.status === 'Dalam Perjalanan'" class="badge badge-info">&#128666; Dalam Perjalanan</span>
+              <span v-else class="badge badge-netral">&#9203; {{ doTerpilih.status }}</span>
+              <br>
+              <button type="button" class="btn-link small" @click="tutupDetail">Tutup</button>
+            </div>
+          </div>
+
+          <ol class="stepper" aria-label="Tahapan pengiriman">
+            <li v-for="(tahap, i) in tahapStatus" :key="tahap" :data-no="i + 1"
+                :class="{ done: i < indeksStatus || (i === indeksStatus && tahap === 'Terkirim'),
+                          current: i === indeksStatus && tahap !== 'Terkirim' }">
+              {{ tahap }}
+            </li>
+          </ol>
+          <div class="progress" role="progressbar" :aria-valuenow="persenProgres" aria-valuemin="0" aria-valuemax="100">
+            <span :style="{ width: persenProgres + '%' }"></span>
+          </div>
+
+          <!-- name-based index: (nilai, label) in objek detailDO -->
+          <dl class="detail-grid">
+            <div v-for="(nilai, label) in detailDO" :key="label">
+              <dt>{{ label }}</dt>
+              <dd>{{ nilai }}</dd>
+            </div>
+          </dl>
+
+          <div class="paket-detail" v-if="paketTerpilih">
+            <strong>{{ paketTerpilih.nama }}</strong>
+            <span class="small muted"> &middot; {{ paketTerpilih.isi.length }} bahan ajar</span>
+            <ul>
+              <li v-for="kode in paketTerpilih.isi" :key="kode"><span class="mono">{{ kode }}</span> &ndash; {{ judulMK(kode) }}</li>
+            </ul>
+          </div>
+
+          <h3>Riwayat perjalanan</h3>
+          <ol class="timeline">
+            <li v-for="(p, i) in doTerpilih.perjalanan" :key="i" :class="{ terakhir: i === doTerpilih.perjalanan.length - 1 }">
+              <time :datetime="p.waktu.replace(' ', 'T')">{{ p.waktu | waktuIndo }}</time>
+              {{ p.keterangan }}
+            </li>
+          </ol>
+
+          <!-- Form progres: disembunyikan bila DO sudah Terkirim -->
+          <div class="progres-form" v-if="doTerpilih.status !== 'Terkirim'">
+            <strong class="small">Tambah progres perjalanan</strong>
+            <div class="form-grid">
+              <div class="field">
+                <label for="dt-ket">Keterangan <span class="req">*</span></label>
+                <input id="dt-ket" type="text" v-model="progres.keterangan" maxlength="80"
+                       placeholder="Tiba di Hub: SURABAYA" :class="{ 'is-invalid': progres.galat }"
+                       @input="progres.galat = ''" @keyup.enter="tambahProgres">
+              </div>
+              <div class="field">
+                <label for="dt-status">Ubah status (opsional)</label>
+                <select id="dt-status" v-model="progres.status">
+                  <option value="">Tetap: {{ doTerpilih.status }}</option>
+                  <option v-for="s in statusLanjutan" :key="s" :value="s">{{ s }}</option>
+                </select>
+              </div>
+            </div>
+            <p class="error-msg" v-if="progres.galat">{{ progres.galat }}</p>
+            <div class="progres-foot">
+              <span class="small muted">Waktu tercatat otomatis: <strong class="mono">{{ waktuSekarang }}</strong></span>
+              <button type="button" class="btn btn-sm" @click="tambahProgres">Tambah ke riwayat</button>
+            </div>
+          </div>
+          <p class="small muted" v-else>DO ini sudah diterima. Riwayat perjalanan sudah ditutup.</p>
+        </section>
+
+        <section class="card empty-state" v-else>
+          <span aria-hidden="true">&#128269;</span>
+          <p class="muted">Cari nomor DO atau NIM, atau klik salah satu DO di daftar.</p>
+        </section>
+      </div>
+
+      <!-- ===== Kolom kanan: semua DO ===== -->
+      <section class="card" aria-label="Daftar DO">
+        <div class="card-head">
+          <h2>Daftar DO</h2>
+          <span class="small muted">Klik baris untuk melihat detail</span>
+        </div>
+        <ul class="do-list">
+          <li v-for="d in daftarDO" :key="d.nomor">
+            <button type="button" class="do-item" :class="{ active: d.nomor === terpilih }" @click="pilih(d.nomor)">
+              <span class="avatar avatar-sm" aria-hidden="true">{{ d.nama | inisial }}</span>
+              <span class="do-item-main">
+                <span class="mono">{{ d.nomor }}</span>
+                <span class="small">{{ d.nama }} &middot; {{ d.paket }}</span>
+              </span>
+              <span class="do-item-side">
+                <span class="badge" :class="{ 'badge-aman': d.status === 'Terkirim', 'badge-info': d.status === 'Dalam Perjalanan', 'badge-netral': d.status === 'Diproses' }">{{ d.status }}</span>
+                <span class="small muted">{{ d.total | rupiah }}</span>
+              </span>
+            </button>
+          </li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</template>

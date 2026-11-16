@@ -1,0 +1,11 @@
+{
+  "name": "tugas3-vue-ut",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SITTA Vue - Tugas Praktik 3 STSI4209 (Vue Component dan Template)",
+  "scripts": {
+    "dev": "node server.js",
+    "serve": "node server.js",
+    "start": "node server.js"
+  }
+}

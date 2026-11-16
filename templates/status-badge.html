@@ -1,0 +1,18 @@
+<!-- Template untuk <status-badge> (js/components/status-badge.js) -->
+<template id="tpl-badge">
+  <span class="badge-wrap" tabindex="0"
+        :class="{ 'ada-catatan': catatan }"
+        @mouseenter="tunjukkan" @mouseleave="sembunyikan"
+        @focus="tunjukkan" @blur="sembunyikan">
+    <span v-if="status === 'kosong'" class="badge badge-kosong">&#10006; Kosong</span>
+    <span v-else-if="status === 'menipis'" class="badge badge-tipis">&#9888; Menipis</span>
+    <span v-else class="badge badge-aman">&#10004; Aman</span>
+    <span class="info-dot" v-if="catatan" aria-hidden="true">i</span>
+
+    <span class="tooltip" role="tooltip" v-show="tampil"
+          :style="{ top: posisi.top + 'px', left: posisi.left + 'px' }">
+      <span class="tooltip-label">Catatan</span>
+      <span v-html="catatan"></span>
+    </span>
+  </span>
+</template>

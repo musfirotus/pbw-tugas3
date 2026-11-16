@@ -1,0 +1,195 @@
+<!-- Template untuk <ba-stock-table> (js/components/stock-table.js) -->
+<template id="tpl-stock">
+  <div class="stok-page">
+    <div class="page-head">
+      <div>
+        <h1>Stok Bahan Ajar</h1>
+        <p class="muted">Ringkasan untuk <strong v-text="labelDaerah"></strong>.
+          Arahkan kursor ke kolom Status untuk membaca catatan.</p>
+      </div>
+      <button type="button" class="btn btn-clay" @click="bukaTambah">+ Tambah bahan ajar</button>
+    </div>
+
+    <!-- Kartu ringkasan. Tiga kartu status dibuat dari objek ringkasan
+         dengan v-for name-based index: (nilai, kunci) in objek -->
+    <section class="stats" aria-label="Ringkasan stok">
+      <div class="stat">
+        <span class="label">Judul</span>
+        <span class="value" v-text="stokPerDaerah.length"></span>
+      </div>
+      <div class="stat">
+        <span class="label">Total eksemplar</span>
+        <span class="value">{{ totalEksemplar | satuan('buah') }}</span>
+      </div>
+      <div class="stat" v-for="(jumlah, status) in ringkasan" :key="status" :class="status">
+        <span class="label">{{ labelStatus[status] }}</span>
+        <span class="value">{{ jumlah }}</span>
+      </div>
+    </section>
+
+    <!-- Filter & sort -->
+    <section class="card" aria-label="Filter dan urutan">
+      <div class="card-head">
+        <h2>Filter &amp; Urutan</h2>
+        <span class="filter-info">Menampilkan <strong>{{ stokTampil.length }}</strong> dari {{ items.length }} baris</span>
+      </div>
+
+      <div class="toolbar">
+        <div class="field">
+          <label for="st-cari">Cari kode / judul</label>
+          <input id="st-cari" type="search" v-model.trim="filter.keyword" placeholder="mis. EKMA atau Manajemen">
+        </div>
+
+        <div class="field">
+          <label for="st-daerah">UT-Daerah</label>
+          <select id="st-daerah" v-model="filter.upbjj">
+            <option value="">Semua UT-Daerah</option>
+            <option v-for="d in upbjjList" :key="d" :value="d">{{ d }}</option>
+          </select>
+        </div>
+
+        <!-- Dependent option: filter kategori baru muncul setelah UT-Daerah dipilih -->
+        <div class="field" v-if="filter.upbjj">
+          <label for="st-kategori">Kategori di {{ filter.upbjj }}</label>
+          <select id="st-kategori" v-model="filter.kategori">
+            <option value="">Semua kategori</option>
+            <option v-for="k in kategoriTersedia" :key="k.nama" :value="k.nama" :disabled="k.jumlah === 0">
+              {{ k.nama }} ({{ k.jumlah }})
+            </option>
+          </select>
+        </div>
+        <div class="field" v-else>
+          <span class="label">Kategori mata kuliah</span>
+          <select disabled aria-label="Kategori mata kuliah">
+            <option>Pilih UT-Daerah dulu</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="st-sort">Urutkan berdasarkan</label>
+          <select id="st-sort" v-model="sortKey">
+            <option v-for="o in opsiSort" :key="o.nilai" :value="o.nilai">{{ o.label }}</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="toolbar-2">
+        <label class="check">
+          <input type="checkbox" v-model="filter.reorder">
+          Hanya yang perlu re-order (stok &lt; safety atau stok = 0)
+        </label>
+
+        <div class="radio-group" role="radiogroup" aria-label="Arah urutan">
+          <label :class="{ on: sortArah === 'asc' }">
+            <input type="radio" value="asc" v-model="sortArah"> &#9650; Naik
+          </label>
+          <label :class="{ on: sortArah === 'desc' }">
+            <input type="radio" value="desc" v-model="sortArah"> &#9660; Turun
+          </label>
+        </div>
+
+        <button type="button" class="btn btn-ghost btn-sm" @click="resetFilter" :disabled="!filterAktif">
+          &#8634; Reset filter
+        </button>
+      </div>
+
+      <!-- Chip filter aktif, hanya dirender bila ada filter -->
+      <div class="chip-list" v-if="filterAktif">
+        <span class="chip" v-if="filter.keyword">Cari: "{{ filter.keyword }}" <button type="button" @click="filter.keyword = ''" aria-label="Hapus filter cari">&times;</button></span>
+        <span class="chip" v-if="filter.upbjj">{{ filter.upbjj }} <button type="button" @click="filter.upbjj = ''" aria-label="Hapus filter daerah">&times;</button></span>
+        <span class="chip" v-if="filter.kategori">{{ filter.kategori }} <button type="button" @click="filter.kategori = ''" aria-label="Hapus filter kategori">&times;</button></span>
+        <span class="chip" v-if="filter.reorder">Perlu re-order <button type="button" @click="filter.reorder = false" aria-label="Hapus filter re-order">&times;</button></span>
+      </div>
+    </section>
+
+    <!-- Tabel stok -->
+    <section class="card" aria-label="Daftar stok">
+      <div class="card-head">
+        <h2>Daftar Stok</h2>
+        <span class="small muted">Klik dua kali pada baris untuk mengedit &middot; judul kolom bertanda &#8645; bisa diklik</span>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Status: hijau = aman (stok &ge; safety), oranye = menipis (stok &lt; safety), merah = kosong (stok = 0).</caption>
+          <thead>
+            <tr>
+              <th scope="col" class="num">No</th>
+              <th scope="col"><button type="button" class="btn-link" @click="urutkan('judul')">Kode / Mata Kuliah &#8645; {{ panahSort('judul') }}</button></th>
+              <th scope="col">Kategori</th>
+              <th scope="col">UT-Daerah</th>
+              <th scope="col">Rak</th>
+              <th scope="col" class="num"><button type="button" class="btn-link" @click="urutkan('harga')">Harga &#8645; {{ panahSort('harga') }}</button></th>
+              <th scope="col" class="num"><button type="button" class="btn-link" @click="urutkan('qty')">Stok &#8645; {{ panahSort('qty') }}</button></th>
+              <th scope="col" class="num">Safety</th>
+              <th scope="col">Status</th>
+              <th scope="col">Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- v-for dengan zero-based index: nomor baris = index + 1 -->
+            <tr v-for="(item, index) in stokTampil" :key="kunciBaris(item)"
+                @dblclick="bukaEdit(item)"
+                :class="{
+                  'row-kosong': statusStok(item) === 'kosong',
+                  'row-tipis': statusStok(item) === 'menipis',
+                  'row-baru': kunciBaris(item) === sorotKunci
+                }">
+              <td class="num muted">{{ index + 1 }}</td>
+              <td>
+                <span class="kode">{{ item.kode }}</span>
+                <span class="judul">{{ item.judul }}</span>
+              </td>
+              <td>{{ item.kategori }}</td>
+              <td>{{ item.upbjj }}</td>
+              <td class="mono nowrap" v-text="item.lokasiRak"></td>
+              <td class="num nowrap">{{ item.harga | rupiah }}</td>
+              <td class="num nowrap">
+                <div class="qty-ctrl">
+                  <button type="button" class="btn-icon" @click="ubahQty(item, -1)" :disabled="item.qty === 0" :aria-label="'Kurangi stok ' + item.kode">&minus;</button>
+                  <strong>{{ item.qty | satuan('buah') }}</strong>
+                  <button type="button" class="btn-icon" @click="ubahQty(item, 1)" :aria-label="'Tambah stok ' + item.kode">+</button>
+                </div>
+                <div class="qty-bar"><span :class="'bar-' + statusStok(item)" :style="{ width: lebarBar(item) + '%' }"></span></div>
+              </td>
+              <td class="num nowrap">{{ item.safety | satuan('buah') }}</td>
+              <td>
+                <status-badge :qty="item.qty" :safety="item.safety" :catatan="item.catatanHTML"></status-badge>
+              </td>
+              <td>
+                <div class="aksi">
+                  <button type="button" class="btn-icon" @click="bukaEdit(item)" :title="'Edit ' + item.kode" :aria-label="'Edit ' + item.kode">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>
+                  </button>
+                  <button type="button" class="btn-icon btn-icon-danger" @click="mintaHapus(item)" :title="'Hapus ' + item.kode" :aria-label="'Hapus ' + item.kode">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/></svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="stokTampil.length === 0">
+              <td colspan="10" class="empty">
+                Tidak ada bahan ajar yang cocok dengan filter.
+                <button type="button" class="btn-link" @click="resetFilter">Reset filter</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Modal tambah / edit: <ba-stock-form> masuk lewat slot <app-modal> -->
+    <app-modal :show="modal.buka" :title="modal.buka ? judulModal : ''" @close="tutupModal">
+      <ba-stock-form v-if="modal.buka"
+                     :mode="modal.mode"
+                     :nilai-awal="modal.item"
+                     :indeks-edit="modal.indeks"
+                     :items="items"
+                     :upbjj-list="upbjjList"
+                     :kategori-list="kategoriList"
+                     @simpan="simpanForm"
+                     @batal="tutupModal"
+                     @notif="teruskanNotif"></ba-stock-form>
+    </app-modal>
+  </div>
+</template>
